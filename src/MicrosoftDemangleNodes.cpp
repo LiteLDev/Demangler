@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../include/MicrosoftDemangleNodes.h"
-#include "../include/Utility.h"
+#include "demangler/MicrosoftDemangleNodes.h"
+#include "demangler/Utility.h"
 #include <cctype>
 #include <string>
 

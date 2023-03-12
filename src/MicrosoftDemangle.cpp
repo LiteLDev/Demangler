@@ -13,13 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../include/MicrosoftDemangle.h"
-#include "../include/Demangle.h"
-#include "../include/MicrosoftDemangleNodes.h"
+#include "demangler/MicrosoftDemangle.h"
+#include "demangler/Demangle.h"
+#include "demangler/MicrosoftDemangleNodes.h"
 
-#include "../include/DemangleConfig.h"
-#include "../include/StringView.h"
-#include "../include/Utility.h"
+#include "demangler/DemangleConfig.h"
+#include "demangler/StringView.h"
+#include "demangler/Utility.h"
 
 #include <array>
 #include <cctype>
