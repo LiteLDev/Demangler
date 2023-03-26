@@ -28,7 +28,7 @@
 
 #pragma warning(disable : 4244)
 
-using namespace llvm;
+using namespace demangler;
 using namespace ms_demangle;
 
 static bool startsWithDigit(StringView S) {
@@ -2380,7 +2380,7 @@ void Demangler::dumpBackReferences() {
         std::printf("\n");
 }
 
-char* llvm::microsoftDemangle(const char* MangledName, size_t* NMangled,
+char* demangler::microsoftDemangle(const char* MangledName, size_t* NMangled,
                               char* Buf, size_t* N,
                               int* Status, MSDemangleFlags Flags) {
     Demangler    D;

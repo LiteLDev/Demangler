@@ -15,7 +15,7 @@
 #include <cctype>
 #include <string>
 
-using namespace llvm;
+using namespace demangler;
 using namespace ms_demangle;
 
 #define OUTPUT_ENUM_CLASS_VALUE(Enum, Value, Desc) \

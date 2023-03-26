@@ -18,18 +18,18 @@
 #include <cstdint>
 #include <string>
 
-namespace llvm
+namespace demangler
 {
 namespace itanium_demangle
 {
 class OutputBuffer;
 }
-} // namespace llvm
+} // namespace demangler
 
-using llvm::itanium_demangle::OutputBuffer;
-using llvm::itanium_demangle::StringView;
+using demangler::itanium_demangle::OutputBuffer;
+using demangler::itanium_demangle::StringView;
 
-namespace llvm
+namespace demangler
 {
 namespace ms_demangle
 {

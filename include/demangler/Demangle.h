@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <string>
 
-namespace llvm {
+namespace demangler {
 /// This is a llvm local version of __cxa_demangle. Other than the name and
 /// being in the llvm namespace it is identical.
 ///

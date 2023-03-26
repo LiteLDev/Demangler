@@ -14,7 +14,7 @@
 
 #include <utility>
 
-namespace llvm
+namespace demangler
 {
 namespace ms_demangle
 {

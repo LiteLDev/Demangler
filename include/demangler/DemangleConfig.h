@@ -87,7 +87,7 @@
 #endif
 
 #define DEMANGLE_NAMESPACE_BEGIN \
-    namespace llvm {             \
+    namespace demangler {        \
     namespace itanium_demangle {
 #define DEMANGLE_NAMESPACE_END \
     }                          \
