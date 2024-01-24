@@ -9,15 +9,14 @@
 #ifndef LLVM_DEMANGLE_MICROSOFTDEMANGLE_H
 #define LLVM_DEMANGLE_MICROSOFTDEMANGLE_H
 
-#include "MicrosoftDemangleNodes.h"
-#include "StringView.h"
+#include "demangler/MicrosoftDemangleNodes.h"
 
+#include <cassert>
+#include <string_view>
 #include <utility>
 
-namespace demangler
-{
-namespace ms_demangle
-{
+namespace demangler {
+namespace ms_demangle {
 // This memory allocator is extremely fast, but it doesn't call dtors
 // for allocated objects. That means you can't use STL containers
 // (such as std::vector) with this allocator. But it pays off --
@@ -25,36 +24,28 @@ namespace ms_demangle
 // STL containers.
 constexpr size_t AllocUnit = 4096;
 
-class ArenaAllocator
-{
-    struct AllocatorNode
-    {
-        uint8_t* Buf = nullptr;
-        size_t Used = 0;
-        size_t Capacity = 0;
-        AllocatorNode* Next = nullptr;
+class ArenaAllocator {
+    struct AllocatorNode {
+        uint8_t*       Buf      = nullptr;
+        size_t         Used     = 0;
+        size_t         Capacity = 0;
+        AllocatorNode* Next     = nullptr;
     };
 
-    void addNode(size_t Capacity)
-    {
+    void addNode(size_t Capacity) {
         AllocatorNode* NewHead = new AllocatorNode;
-        NewHead->Buf = new uint8_t[Capacity];
-        NewHead->Next = Head;
-        NewHead->Capacity = Capacity;
-        Head = NewHead;
-        NewHead->Used = 0;
+        NewHead->Buf           = new uint8_t[Capacity];
+        NewHead->Next          = Head;
+        NewHead->Capacity      = Capacity;
+        Head                   = NewHead;
+        NewHead->Used          = 0;
     }
 
 public:
-    ArenaAllocator()
-    {
-        addNode(AllocUnit);
-    }
+    ArenaAllocator() { addNode(AllocUnit); }
 
-    ~ArenaAllocator()
-    {
-        while (Head)
-        {
+    ~ArenaAllocator() {
+        while (Head) {
             assert(Head->Buf);
             delete[] Head->Buf;
             AllocatorNode* Next = Head->Next;
@@ -63,15 +54,13 @@ public:
         }
     }
 
-    char* allocUnalignedBuffer(size_t Size)
-    {
+    char* allocUnalignedBuffer(size_t Size) {
         assert(Head && Head->Buf);
 
         uint8_t* P = Head->Buf + Head->Used;
 
         Head->Used += Size;
-        if (Head->Used <= Head->Capacity)
-            return reinterpret_cast<char*>(P);
+        if (Head->Used <= Head->Capacity) return reinterpret_cast<char*>(P);
 
         addNode(std::max(AllocUnit, Size));
         Head->Used = Size;
@@ -79,20 +68,17 @@ public:
     }
 
     template <typename T, typename... Args>
-    T* allocArray(size_t Count)
-    {
+    T* allocArray(size_t Count) {
         size_t Size = Count * sizeof(T);
         assert(Head && Head->Buf);
 
-        size_t P = (size_t)Head->Buf + Head->Used;
-        uintptr_t AlignedP =
-            (((size_t)P + alignof(T) - 1) & ~(size_t)(alignof(T) - 1));
-        uint8_t* PP = (uint8_t*)AlignedP;
-        size_t Adjustment = AlignedP - P;
+        size_t    P          = (size_t)Head->Buf + Head->Used;
+        uintptr_t AlignedP   = (((size_t)P + alignof(T) - 1) & ~(size_t)(alignof(T) - 1));
+        uint8_t*  PP         = (uint8_t*)AlignedP;
+        size_t    Adjustment = AlignedP - P;
 
         Head->Used += Size + Adjustment;
-        if (Head->Used <= Head->Capacity)
-            return new (PP) T[Count]();
+        if (Head->Used <= Head->Capacity) return new (PP) T[Count]();
 
         addNode(std::max(AllocUnit, Size));
         Head->Used = Size;
@@ -100,22 +86,19 @@ public:
     }
 
     template <typename T, typename... Args>
-    T* alloc(Args&&... ConstructorArgs)
-    {
+    T* alloc(Args&&... ConstructorArgs) {
         constexpr size_t Size = sizeof(T);
         assert(Head && Head->Buf);
 
-        size_t P = (size_t)Head->Buf + Head->Used;
-        uintptr_t AlignedP =
-            (((size_t)P + alignof(T) - 1) & ~(size_t)(alignof(T) - 1));
-        uint8_t* PP = (uint8_t*)AlignedP;
-        size_t Adjustment = AlignedP - P;
+        size_t    P          = (size_t)Head->Buf + Head->Used;
+        uintptr_t AlignedP   = (((size_t)P + alignof(T) - 1) & ~(size_t)(alignof(T) - 1));
+        uint8_t*  PP         = (uint8_t*)AlignedP;
+        size_t    Adjustment = AlignedP - P;
 
         Head->Used += Size + Adjustment;
-        if (Head->Used <= Head->Capacity)
-            return new (PP) T(std::forward<Args>(ConstructorArgs)...);
+        if (Head->Used <= Head->Capacity) return new (PP) T(std::forward<Args>(ConstructorArgs)...);
 
-        static_assert(Size < AllocUnit, "");
+        static_assert(Size < AllocUnit);
         addNode(AllocUnit);
         Head->Used = Size;
         return new (Head->Buf) T(std::forward<Args>(ConstructorArgs)...);
@@ -125,160 +108,124 @@ private:
     AllocatorNode* Head = nullptr;
 };
 
-struct BackrefContext
-{
+struct BackrefContext {
     static constexpr size_t Max = 10;
 
     TypeNode* FunctionParams[Max];
-    size_t FunctionParamCount = 0;
+    size_t    FunctionParamCount = 0;
 
     // The first 10 BackReferences in a mangled name can be back-referenced by
     // special name @[0-9]. This is a storage for the first 10 BackReferences.
     NamedIdentifierNode* Names[Max];
-    size_t NamesCount = 0;
+    size_t               NamesCount = 0;
 };
 
-enum class QualifierMangleMode
-{
-    Drop,
-    Mangle,
-    Result
-};
+enum class QualifierMangleMode { Drop, Mangle, Result };
 
-enum NameBackrefBehavior : uint8_t
-{
-    NBB_None = 0,          // don't save any names as backrefs.
+enum NameBackrefBehavior : uint8_t {
+    NBB_None     = 0,      // don't save any names as backrefs.
     NBB_Template = 1 << 0, // save template instanations.
-    NBB_Simple = 1 << 1,   // save simple names.
+    NBB_Simple   = 1 << 1, // save simple names.
 };
 
-enum class FunctionIdentifierCodeGroup
-{
-    Basic,
-    Under,
-    DoubleUnder
-};
+enum class FunctionIdentifierCodeGroup { Basic, Under, DoubleUnder };
 
 // Demangler class takes the main role in demangling symbols.
 // It has a set of functions to parse mangled symbols into Type instances.
 // It also has a set of functions to convert Type instances to strings.
-class Demangler
-{
+class Demangler {
 public:
-    Demangler() = default;
+    Demangler()          = default;
     virtual ~Demangler() = default;
 
     // You are supposed to call parse() first and then check if error is true.  If
     // it is false, call output() to write the formatted name to the given stream.
-    SymbolNode* parse(StringView& MangledName);
+    SymbolNode* parse(std::string_view& MangledName);
 
-    TagTypeNode* parseTagUniqueName(StringView& MangledName);
+    TagTypeNode* parseTagUniqueName(std::string_view& MangledName);
 
     // True if an error occurred.
     bool Error = false;
 
     void dumpBackReferences();
 
-    SymbolNode* demangleEncodedSymbol(StringView& MangledName,
-                                      QualifiedNameNode* QN);
-    SymbolNode* demangleDeclarator(StringView& MangledName);
-    SymbolNode* demangleMD5Name(StringView& MangledName);
-    SymbolNode* demangleTypeinfoName(StringView& MangledName);
+    SymbolNode* demangleEncodedSymbol(std::string_view& MangledName, QualifiedNameNode* QN);
+    SymbolNode* demangleDeclarator(std::string_view& MangledName);
+    SymbolNode* demangleMD5Name(std::string_view& MangledName);
+    SymbolNode* demangleTypeinfoName(std::string_view& MangledName);
 
-    VariableSymbolNode* demangleVariableEncoding(StringView& MangledName,
-                                                 StorageClass SC);
-    FunctionSymbolNode* demangleFunctionEncoding(StringView& MangledName);
+    VariableSymbolNode* demangleVariableEncoding(std::string_view& MangledName, StorageClass SC);
+    FunctionSymbolNode* demangleFunctionEncoding(std::string_view& MangledName);
 
-    Qualifiers demanglePointerExtQualifiers(StringView& MangledName);
+    Qualifiers demanglePointerExtQualifiers(std::string_view& MangledName);
 
     // Parser functions. This is a recursive-descent parser.
-    TypeNode* demangleType(StringView& MangledName, QualifierMangleMode QMM);
-    PrimitiveTypeNode* demanglePrimitiveType(StringView& MangledName);
-    CustomTypeNode* demangleCustomType(StringView& MangledName);
-    TagTypeNode* demangleClassType(StringView& MangledName);
-    PointerTypeNode* demanglePointerType(StringView& MangledName);
-    PointerTypeNode* demangleMemberPointerType(StringView& MangledName);
-    FunctionSignatureNode* demangleFunctionType(StringView& MangledName,
-                                                bool HasThisQuals);
+    TypeNode*              demangleType(std::string_view& MangledName, QualifierMangleMode QMM);
+    PrimitiveTypeNode*     demanglePrimitiveType(std::string_view& MangledName);
+    CustomTypeNode*        demangleCustomType(std::string_view& MangledName);
+    TagTypeNode*           demangleClassType(std::string_view& MangledName);
+    PointerTypeNode*       demanglePointerType(std::string_view& MangledName);
+    PointerTypeNode*       demangleMemberPointerType(std::string_view& MangledName);
+    FunctionSignatureNode* demangleFunctionType(std::string_view& MangledName, bool HasThisQuals);
 
-    ArrayTypeNode* demangleArrayType(StringView& MangledName);
+    ArrayTypeNode* demangleArrayType(std::string_view& MangledName);
 
-    NodeArrayNode* demangleFunctionParameterList(StringView& MangledName,
-                                                 bool& IsVariadic);
-    NodeArrayNode* demangleTemplateParameterList(StringView& MangledName);
+    NodeArrayNode* demangleFunctionParameterList(std::string_view& MangledName, bool& IsVariadic);
+    NodeArrayNode* demangleTemplateParameterList(std::string_view& MangledName);
 
-    std::pair<uint64_t, bool> demangleNumber(StringView& MangledName);
-    uint64_t demangleUnsigned(StringView& MangledName);
-    int64_t demangleSigned(StringView& MangledName);
+    std::pair<uint64_t, bool> demangleNumber(std::string_view& MangledName);
+    uint64_t                  demangleUnsigned(std::string_view& MangledName);
+    int64_t                   demangleSigned(std::string_view& MangledName);
 
-    void memorizeString(StringView s);
+    void memorizeString(std::string_view s);
     void memorizeIdentifier(IdentifierNode* Identifier);
 
     /// Allocate a copy of \p Borrowed into memory that we own.
-    StringView copyString(StringView Borrowed);
+    std::string_view copyString(std::string_view Borrowed);
 
-    QualifiedNameNode* demangleFullyQualifiedTypeName(StringView& MangledName);
-    QualifiedNameNode* demangleFullyQualifiedSymbolName(StringView& MangledName);
+    QualifiedNameNode* demangleFullyQualifiedTypeName(std::string_view& MangledName);
+    QualifiedNameNode* demangleFullyQualifiedSymbolName(std::string_view& MangledName);
 
-    IdentifierNode* demangleUnqualifiedTypeName(StringView& MangledName,
-                                                bool Memorize);
-    IdentifierNode* demangleUnqualifiedSymbolName(StringView& MangledName,
-                                                  NameBackrefBehavior NBB);
+    IdentifierNode* demangleUnqualifiedTypeName(std::string_view& MangledName, bool Memorize);
+    IdentifierNode* demangleUnqualifiedSymbolName(std::string_view& MangledName, NameBackrefBehavior NBB);
 
-    QualifiedNameNode* demangleNameScopeChain(StringView& MangledName,
-                                              IdentifierNode* UnqualifiedName);
-    IdentifierNode* demangleNameScopePiece(StringView& MangledName);
+    QualifiedNameNode* demangleNameScopeChain(std::string_view& MangledName, IdentifierNode* UnqualifiedName);
+    IdentifierNode*    demangleNameScopePiece(std::string_view& MangledName);
 
-    NamedIdentifierNode* demangleBackRefName(StringView& MangledName);
-    IdentifierNode* demangleTemplateInstantiationName(StringView& MangledName,
-                                                      NameBackrefBehavior NBB);
-    IntrinsicFunctionKind
-        translateIntrinsicFunctionCode(char CH, FunctionIdentifierCodeGroup Group);
-    IdentifierNode* demangleFunctionIdentifierCode(StringView& MangledName);
-    IdentifierNode*
-        demangleFunctionIdentifierCode(StringView& MangledName,
-                                       FunctionIdentifierCodeGroup Group);
-    StructorIdentifierNode* demangleStructorIdentifier(StringView& MangledName,
-                                                       bool IsDestructor);
-    ConversionOperatorIdentifierNode*
-        demangleConversionOperatorIdentifier(StringView& MangledName);
-    LiteralOperatorIdentifierNode*
-        demangleLiteralOperatorIdentifier(StringView& MangledName);
+    NamedIdentifierNode*  demangleBackRefName(std::string_view& MangledName);
+    IdentifierNode*       demangleTemplateInstantiationName(std::string_view& MangledName, NameBackrefBehavior NBB);
+    IntrinsicFunctionKind translateIntrinsicFunctionCode(char CH, FunctionIdentifierCodeGroup Group);
+    IdentifierNode*       demangleFunctionIdentifierCode(std::string_view& MangledName);
+    IdentifierNode* demangleFunctionIdentifierCode(std::string_view& MangledName, FunctionIdentifierCodeGroup Group);
+    StructorIdentifierNode*           demangleStructorIdentifier(std::string_view& MangledName, bool IsDestructor);
+    ConversionOperatorIdentifierNode* demangleConversionOperatorIdentifier(std::string_view& MangledName);
+    LiteralOperatorIdentifierNode*    demangleLiteralOperatorIdentifier(std::string_view& MangledName);
 
-    SymbolNode* demangleSpecialIntrinsic(StringView& MangledName);
-    SpecialTableSymbolNode*
-        demangleSpecialTableSymbolNode(StringView& MangledName,
-                                       SpecialIntrinsicKind SIK);
-    LocalStaticGuardVariableNode*
-        demangleLocalStaticGuard(StringView& MangledName, bool IsThread);
-    VariableSymbolNode* demangleUntypedVariable(ArenaAllocator& Arena,
-                                                StringView& MangledName,
-                                                StringView VariableName);
+    SymbolNode*             demangleSpecialIntrinsic(std::string_view& MangledName);
+    SpecialTableSymbolNode* demangleSpecialTableSymbolNode(std::string_view& MangledName, SpecialIntrinsicKind SIK);
+    LocalStaticGuardVariableNode* demangleLocalStaticGuard(std::string_view& MangledName, bool IsThread);
     VariableSymbolNode*
-        demangleRttiBaseClassDescriptorNode(ArenaAllocator& Arena,
-                                            StringView& MangledName);
-    FunctionSymbolNode* demangleInitFiniStub(StringView& MangledName,
-                                             bool IsDestructor);
+    demangleUntypedVariable(ArenaAllocator& Arena, std::string_view& MangledName, std::string_view VariableName);
+    VariableSymbolNode* demangleRttiBaseClassDescriptorNode(ArenaAllocator& Arena, std::string_view& MangledName);
+    FunctionSymbolNode* demangleInitFiniStub(std::string_view& MangledName, bool IsDestructor);
 
-    NamedIdentifierNode* demangleSimpleName(StringView& MangledName,
-                                            bool Memorize);
-    NamedIdentifierNode* demangleAnonymousNamespaceName(StringView& MangledName);
-    NamedIdentifierNode* demangleLocallyScopedNamePiece(StringView& MangledName);
-    EncodedStringLiteralNode* demangleStringLiteral(StringView& MangledName);
-    FunctionSymbolNode* demangleVcallThunkNode(StringView& MangledName);
+    NamedIdentifierNode*      demangleSimpleName(std::string_view& MangledName, bool Memorize);
+    NamedIdentifierNode*      demangleAnonymousNamespaceName(std::string_view& MangledName);
+    NamedIdentifierNode*      demangleLocallyScopedNamePiece(std::string_view& MangledName);
+    EncodedStringLiteralNode* demangleStringLiteral(std::string_view& MangledName);
+    FunctionSymbolNode*       demangleVcallThunkNode(std::string_view& MangledName);
 
-    StringView demangleSimpleString(StringView& MangledName, bool Memorize);
+    std::string_view demangleSimpleString(std::string_view& MangledName, bool Memorize);
 
-    FuncClassType demangleFunctionClass(StringView& MangledName);
-    CallingConv demangleCallingConvention(StringView& MangledName);
-    StorageClass demangleVariableStorageClass(StringView& MangledName);
-    bool demangleThrowSpecification(StringView& MangledName);
-    wchar_t demangleWcharLiteral(StringView& MangledName);
-    uint8_t demangleCharLiteral(StringView& MangledName);
+    FuncClass    demangleFunctionClass(std::string_view& MangledName);
+    CallingConv  demangleCallingConvention(std::string_view& MangledName);
+    StorageClass demangleVariableStorageClass(std::string_view& MangledName);
+    bool         demangleThrowSpecification(std::string_view& MangledName);
+    wchar_t      demangleWcharLiteral(std::string_view& MangledName);
+    uint8_t      demangleCharLiteral(std::string_view& MangledName);
 
-    std::pair<Qualifiers, bool> demangleQualifiers(StringView& MangledName);
+    std::pair<Qualifiers, bool> demangleQualifiers(std::string_view& MangledName);
 
-private:
     // Memory allocator.
     ArenaAllocator Arena;
 
@@ -299,6 +246,6 @@ private:
 };
 
 } // namespace ms_demangle
-} // namespace llvm
+} // namespace demangler
 
 #endif // LLVM_DEMANGLE_MICROSOFTDEMANGLE_H

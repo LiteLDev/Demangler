@@ -16,13 +16,16 @@
 #ifndef DEMANGLE_UTILITY_H
 #define DEMANGLE_UTILITY_H
 
-#include "StringView.h"
+#include "DemangleConfig.h"
+
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <string_view>
 
 DEMANGLE_NAMESPACE_BEGIN
 
@@ -40,13 +43,11 @@ class OutputBuffer {
             // Reduce the number of reallocations, with a bit of hysteresis. The
             // number here is chosen so the first allocation will more-than-likely not
             // allocate more than 1K.
-            Need += 1024 - 32;
+            Need           += 1024 - 32;
             BufferCapacity *= 2;
-            if (BufferCapacity < Need)
-                BufferCapacity = Need;
+            if (BufferCapacity < Need) BufferCapacity = Need;
             Buffer = static_cast<char*>(std::realloc(Buffer, BufferCapacity));
-            if (Buffer == nullptr)
-                std::terminate();
+            if (Buffer == nullptr) std::terminate();
         }
     }
 
@@ -56,37 +57,25 @@ class OutputBuffer {
 
         // Output at least one character.
         do {
-            *--TempPtr = char('0' + N % 10);
-            N /= 10;
+            *--TempPtr  = char('0' + N % 10);
+            N          /= 10;
         } while (N);
 
         // Add negative sign.
-        if (isNeg)
-            *--TempPtr = '-';
+        if (isNeg) *--TempPtr = '-';
 
-        return operator+=(StringView(TempPtr, Temp.data() + Temp.size()));
+        return operator+=(std::string_view(TempPtr, Temp.data() + Temp.size() - TempPtr));
     }
 
 public:
-    OutputBuffer(char* StartBuf, size_t Size)
-        : Buffer(StartBuf)
-        , CurrentPosition(0)
-        , BufferCapacity(Size) {
-    }
+    OutputBuffer(char* StartBuf, size_t Size) : Buffer(StartBuf), BufferCapacity(Size) {}
+    OutputBuffer(char* StartBuf, size_t* SizePtr) : OutputBuffer(StartBuf, StartBuf ? *SizePtr : 0) {}
     OutputBuffer() = default;
     // Non-copyable
-    OutputBuffer(const OutputBuffer&) = delete;
+    OutputBuffer(const OutputBuffer&)            = delete;
     OutputBuffer& operator=(const OutputBuffer&) = delete;
 
-    operator StringView() const {
-        return StringView(Buffer, CurrentPosition);
-    }
-
-    void reset(char* Buffer_, size_t BufferCapacity_) {
-        CurrentPosition = 0;
-        Buffer          = Buffer_;
-        BufferCapacity  = BufferCapacity_;
-    }
+    operator std::string_view() const { return std::string_view(Buffer, CurrentPosition); }
 
     /// If a ParameterPackExpansion (or similar type) is encountered, the offset
     /// into the pack that we're currently printing.
@@ -97,9 +86,7 @@ public:
     /// Use a counter so we can simply increment inside parentheses.
     unsigned GtIsGt = 1;
 
-    bool isGtInsideTemplateArgs() const {
-        return GtIsGt == 0;
-    }
+    bool isGtInsideTemplateArgs() const { return GtIsGt == 0; }
 
     void printOpen(char Open = '(') {
         GtIsGt++;
@@ -110,10 +97,10 @@ public:
         *this += Close;
     }
 
-    OutputBuffer& operator+=(StringView R) {
+    OutputBuffer& operator+=(std::string_view R) {
         if (size_t Size = R.size()) {
             grow(Size);
-            std::memcpy(Buffer + CurrentPosition, R.begin(), Size);
+            std::memcpy(Buffer + CurrentPosition, &*R.begin(), Size);
             CurrentPosition += Size;
         }
         return *this;
@@ -125,83 +112,55 @@ public:
         return *this;
     }
 
-    OutputBuffer& prepend(StringView R) {
+    OutputBuffer& prepend(std::string_view R) {
         size_t Size = R.size();
 
         grow(Size);
         std::memmove(Buffer + Size, Buffer, CurrentPosition);
-        std::memcpy(Buffer, R.begin(), Size);
+        std::memcpy(Buffer, &*R.begin(), Size);
         CurrentPosition += Size;
 
         return *this;
     }
 
-    OutputBuffer& operator<<(StringView R) {
-        return (*this += R);
-    }
+    OutputBuffer& operator<<(std::string_view R) { return (*this += R); }
 
-    OutputBuffer& operator<<(char C) {
-        return (*this += C);
-    }
+    OutputBuffer& operator<<(char C) { return (*this += C); }
 
-    OutputBuffer& operator<<(long long N) {
-        return writeUnsigned(static_cast<unsigned long long>(std::abs(N)), N < 0);
-    }
+    OutputBuffer& operator<<(long long N) { return writeUnsigned(static_cast<unsigned long long>(std::abs(N)), N < 0); }
 
-    OutputBuffer& operator<<(unsigned long long N) {
-        return writeUnsigned(N, false);
-    }
+    OutputBuffer& operator<<(unsigned long long N) { return writeUnsigned(N, false); }
 
-    OutputBuffer& operator<<(long N) {
-        return this->operator<<(static_cast<long long>(N));
-    }
+    OutputBuffer& operator<<(long N) { return this->operator<<(static_cast<long long>(N)); }
 
-    OutputBuffer& operator<<(unsigned long N) {
-        return this->operator<<(static_cast<unsigned long long>(N));
-    }
+    OutputBuffer& operator<<(unsigned long N) { return this->operator<<(static_cast<unsigned long long>(N)); }
 
-    OutputBuffer& operator<<(int N) {
-        return this->operator<<(static_cast<long long>(N));
-    }
+    OutputBuffer& operator<<(int N) { return this->operator<<(static_cast<long long>(N)); }
 
-    OutputBuffer& operator<<(unsigned int N) {
-        return this->operator<<(static_cast<unsigned long long>(N));
-    }
+    OutputBuffer& operator<<(unsigned int N) { return this->operator<<(static_cast<unsigned long long>(N)); }
 
     void insert(size_t Pos, const char* S, size_t N) {
         assert(Pos <= CurrentPosition);
-        if (N == 0)
-            return;
+        if (N == 0) return;
         grow(N);
         std::memmove(Buffer + Pos + N, Buffer + Pos, CurrentPosition - Pos);
         std::memcpy(Buffer + Pos, S, N);
         CurrentPosition += N;
     }
 
-    size_t getCurrentPosition() const {
-        return CurrentPosition;
-    }
-    void setCurrentPosition(size_t NewPos) {
-        CurrentPosition = NewPos;
-    }
+    size_t getCurrentPosition() const { return CurrentPosition; }
+    void   setCurrentPosition(size_t NewPos) { CurrentPosition = NewPos; }
 
     char back() const {
-        return CurrentPosition ? Buffer[CurrentPosition - 1] : '\0';
+        assert(CurrentPosition);
+        return Buffer[CurrentPosition - 1];
     }
 
-    bool empty() const {
-        return CurrentPosition == 0;
-    }
+    bool empty() const { return CurrentPosition == 0; }
 
-    char* getBuffer() {
-        return Buffer;
-    }
-    char* getBufferEnd() {
-        return Buffer + CurrentPosition - 1;
-    }
-    size_t getBufferCapacity() const {
-        return BufferCapacity;
-    }
+    char*  getBuffer() { return Buffer; }
+    char*  getBufferEnd() { return Buffer + CurrentPosition - 1; }
+    size_t getBufferCapacity() const { return BufferCapacity; }
 };
 
 template <class T>
@@ -210,37 +169,14 @@ class ScopedOverride {
     T  Original;
 
 public:
-    ScopedOverride(T& Loc_)
-        : ScopedOverride(Loc_, Loc_) {
-    }
+    ScopedOverride(T& Loc_) : ScopedOverride(Loc_, Loc_) {}
 
-    ScopedOverride(T& Loc_, T NewVal)
-        : Loc(Loc_)
-        , Original(Loc_) {
-        Loc_ = std::move(NewVal);
-    }
-    ~ScopedOverride() {
-        Loc = std::move(Original);
-    }
+    ScopedOverride(T& Loc_, T NewVal) : Loc(Loc_), Original(Loc_) { Loc_ = std::move(NewVal); }
+    ~ScopedOverride() { Loc = std::move(Original); }
 
-    ScopedOverride(const ScopedOverride&) = delete;
+    ScopedOverride(const ScopedOverride&)            = delete;
     ScopedOverride& operator=(const ScopedOverride&) = delete;
 };
-
-inline bool initializeOutputBuffer(char* Buf, size_t* N, OutputBuffer& OB,
-                                   size_t InitSize) {
-    size_t BufferSize;
-    if (Buf == nullptr) {
-        Buf = static_cast<char*>(std::malloc(InitSize));
-        if (Buf == nullptr)
-            return false;
-        BufferSize = InitSize;
-    } else
-        BufferSize = *N;
-
-    OB.reset(Buf, BufferSize);
-    return true;
-}
 
 DEMANGLE_NAMESPACE_END
 
