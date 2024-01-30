@@ -1753,7 +1753,7 @@ FunctionSymbolNode* Demangler::demangleFunctionEncoding(std::string_view& Mangle
         // "C" function.
         FSN = Arena.alloc<FunctionSignatureNode>();
     } else {
-        bool HasThisQuals = !(FC & (FC_Global | FC_Static));
+        bool HasThisQuals = !(FC & (FuncClass)(FC_Global | FC_Static));
         FSN               = demangleFunctionType(MangledName, HasThisQuals);
     }
 
