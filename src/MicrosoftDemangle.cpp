@@ -49,6 +49,16 @@ static bool consumeFront(std::string_view& S, std::string_view C) {
     return true;
 }
 
+static bool consumeFront(std::string_view& S, std::string_view PrefixA, std::string_view PrefixB, bool A) {
+    const std::string_view& Prefix = A ? PrefixA : PrefixB;
+    return consumeFront(S, Prefix);
+}
+
+static bool startsWith(std::string_view S, std::string_view PrefixA, std::string_view PrefixB, bool A) {
+    const std::string_view& Prefix = A ? PrefixA : PrefixB;
+    return demangler::itanium_demangle::starts_with(S, Prefix);
+}
+
 static bool isMemberPointer(std::string_view MangledName, bool& Error) {
     Error        = false;
     const char F = MangledName.front();
@@ -321,11 +331,7 @@ static VariableSymbolNode* synthesizeVariable(ArenaAllocator& Arena, TypeNode* T
     return VSN;
 }
 
-VariableSymbolNode* Demangler::demangleUntypedVariable(
-    ArenaAllocator&   Arena,
-    std::string_view& MangledName,
-    std::string_view  VariableName
-) {
+VariableSymbolNode* Demangler::demangleUntypedVariable(std::string_view& MangledName, std::string_view VariableName) {
     NamedIdentifierNode* NI  = synthesizeNamedIdentifier(Arena, VariableName);
     QualifiedNameNode*   QN  = demangleNameScopeChain(MangledName, NI);
     VariableSymbolNode*  VSN = Arena.alloc<VariableSymbolNode>();
@@ -336,8 +342,7 @@ VariableSymbolNode* Demangler::demangleUntypedVariable(
     return nullptr;
 }
 
-VariableSymbolNode*
-Demangler::demangleRttiBaseClassDescriptorNode(ArenaAllocator& Arena, std::string_view& MangledName) {
+VariableSymbolNode* Demangler::demangleRttiBaseClassDescriptorNode(std::string_view& MangledName) {
     RttiBaseClassDescriptorNode* RBCDN = Arena.alloc<RttiBaseClassDescriptorNode>();
     RBCDN->NVOffset                    = demangleUnsigned(MangledName);
     RBCDN->VBPtrOffset                 = demangleSigned(MangledName);
@@ -421,11 +426,11 @@ SymbolNode* Demangler::demangleSpecialIntrinsic(std::string_view& MangledName) {
         return synthesizeVariable(Arena, T, "`RTTI Type Descriptor'");
     }
     case SpecialIntrinsicKind::RttiBaseClassArray:
-        return demangleUntypedVariable(Arena, MangledName, "`RTTI Base Class Array'");
+        return demangleUntypedVariable(MangledName, "`RTTI Base Class Array'");
     case SpecialIntrinsicKind::RttiClassHierarchyDescriptor:
-        return demangleUntypedVariable(Arena, MangledName, "`RTTI Class Hierarchy Descriptor'");
+        return demangleUntypedVariable(MangledName, "`RTTI Class Hierarchy Descriptor'");
     case SpecialIntrinsicKind::RttiBaseClassDescriptor:
-        return demangleRttiBaseClassDescriptorNode(Arena, MangledName);
+        return demangleRttiBaseClassDescriptorNode(MangledName);
     case SpecialIntrinsicKind::DynamicInitializer:
         return demangleInitFiniStub(MangledName, /*IsDestructor=*/false);
     case SpecialIntrinsicKind::DynamicAtexitDestructor:
@@ -1730,7 +1735,7 @@ FunctionSymbolNode* Demangler::demangleFunctionEncoding(std::string_view& Mangle
     }
 
     FuncClass FC = demangleFunctionClass(MangledName);
-    FC.set(ExtraFlags | FC);//avoid pos track lost
+    FC.set(ExtraFlags | FC); // avoid pos track lost
 
     FunctionSignatureNode* FSN = nullptr;
     ThunkSignatureNode*    TTN = nullptr;
@@ -1836,6 +1841,10 @@ PrimitiveTypeNode* Demangler::demanglePrimitiveType(std::string_view& MangledNam
             return Arena.alloc<PrimitiveTypeNode>(PrimitiveKind::Char16);
         case 'U':
             return Arena.alloc<PrimitiveTypeNode>(PrimitiveKind::Char32);
+        case 'P':
+            return Arena.alloc<PrimitiveTypeNode>(PrimitiveKind::Auto);
+        case 'T':
+            return Arena.alloc<PrimitiveTypeNode>(PrimitiveKind::DecltypeAuto);
         }
         break;
     }
@@ -2054,6 +2063,17 @@ NodeArrayNode* Demangler::demangleTemplateParameterList(std::string_view& Mangle
 
         NodeList& TP = **Current;
 
+        // <auto-nttp> ::= $ M <type> <nttp>
+        const bool IsAutoNTTP = consumeFront(MangledName, "$M");
+        if (IsAutoNTTP) {
+            // The deduced type of the auto NTTP parameter isn't printed so
+            // we want to ignore the AST created from demangling the type.
+            //
+            // TODO: Avoid the extra allocations to the bump allocator in this case.
+            (void)demangleType(MangledName, QualifierMangleMode::Drop);
+            if (Error) return nullptr;
+        }
+
         TemplateParameterReferenceNode* TPRN = nullptr;
         if (consumeFront(MangledName, "$$Y")) {
             // Template alias
@@ -2064,12 +2084,15 @@ NodeArrayNode* Demangler::demangleTemplateParameterList(std::string_view& Mangle
         } else if (consumeFront(MangledName, "$$C")) {
             // Type has qualifiers.
             TP.N = demangleType(MangledName, QualifierMangleMode::Mangle);
-        } else if (demangler::itanium_demangle::starts_with(MangledName, "$1") || demangler::itanium_demangle::starts_with(MangledName, "$H") || demangler::itanium_demangle::starts_with(MangledName, "$I") || demangler::itanium_demangle::starts_with(MangledName, "$J")) {
+        } else if (startsWith(MangledName, "$1", "1", !IsAutoNTTP) || startsWith(MangledName, "$H", "H", !IsAutoNTTP)
+                   || startsWith(MangledName, "$I", "I", !IsAutoNTTP)
+                   || startsWith(MangledName, "$J", "J", !IsAutoNTTP)) {
             // Pointer to member
             TP.N = TPRN           = Arena.alloc<TemplateParameterReferenceNode>();
             TPRN->IsMemberPointer = true;
 
-            MangledName.remove_prefix(1);
+            if (!IsAutoNTTP) MangledName.remove_prefix(1); // Remove leading '$'
+
             // 1 - single inheritance       <name>
             // H - multiple inheritance     <name> <number>
             // I - virtual inheritance      <name> <number> <number>
@@ -2109,11 +2132,11 @@ NodeArrayNode* Demangler::demangleTemplateParameterList(std::string_view& Mangle
             TP.N = TPRN    = Arena.alloc<TemplateParameterReferenceNode>();
             TPRN->Symbol   = parse(MangledName);
             TPRN->Affinity = PointerAffinity::Reference;
-        } else if (demangler::itanium_demangle::starts_with(MangledName, "$F") || demangler::itanium_demangle::starts_with(MangledName, "$G")) {
+        } else if (startsWith(MangledName, "$F", "F", !IsAutoNTTP) || startsWith(MangledName, "$G", "G", !IsAutoNTTP)) {
             TP.N = TPRN = Arena.alloc<TemplateParameterReferenceNode>();
 
             // Data member pointer.
-            MangledName.remove_prefix(1);
+            if (!IsAutoNTTP) MangledName.remove_prefix(1); // Remove leading '$'
             char InheritanceSpecifier = MangledName.front();
             MangledName.remove_prefix(1);
 
@@ -2130,7 +2153,7 @@ NodeArrayNode* Demangler::demangleTemplateParameterList(std::string_view& Mangle
             }
             TPRN->IsMemberPointer = true;
 
-        } else if (consumeFront(MangledName, "$0")) {
+        } else if (consumeFront(MangledName, "$0", "0", !IsAutoNTTP)) {
             // Integral non-type template parameter
             bool     IsNegative         = false;
             uint64_t Value              = 0;

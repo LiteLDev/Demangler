@@ -14,13 +14,12 @@
 #define LLVM_DEMANGLE_MICROSOFTDEMANGLENODES_H
 
 #include <array>
-#include <cassert>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
 #include <demangler/DemangleConfig.h>
-#include <demangler/StringViewExtras.h>
 
 #define LL_ENUM_EMU(EmuType, Enum, EnumType)                                                                           \
     constexpr EmuType(Enum type) : val(type) {}                                                                        \
@@ -33,8 +32,8 @@
         this->val = static_cast<Enum>(type);                                                                           \
         return *this;                                                                                                  \
     }                                                                                                                  \
-    inline EnumType operator&(EnumType type) { return ((EnumType)this->val) & type; }                                  \
-    inline EnumType operator|(EnumType type) { return ((EnumType)this->val) | type; }                                  \
+    inline EnumType operator&(EnumType type) const { return ((EnumType)this->val) & type; }                            \
+    inline EnumType operator|(EnumType type) const { return ((EnumType)this->val) | type; }                            \
                                                                                                                        \
     inline bool operator==(EmuType type) const { return this->val == type.val; }                                       \
     inline bool operator!=(EmuType type) const { return this->val != type.val; }                                       \
@@ -55,10 +54,10 @@ class OutputBuffer;
 }
 } // namespace demangler
 
-using demangler::itanium_demangle::OutputBuffer;
-
 namespace demangler {
 namespace ms_demangle {
+
+using itanium_demangle::OutputBuffer;
 
 // Storage classes
 enum Qualifiers : uint8_t {
@@ -162,6 +161,8 @@ enum class PrimitiveKind {
     Double,
     Ldouble,
     Nullptr,
+    Auto,
+    DecltypeAuto,
 };
 
 enum class CharKind {
@@ -409,6 +410,10 @@ enum class NodeKind {
 };
 
 struct Node {
+    std::string_view            before;
+    std::span<std::string_view> after;
+    void*                       extras{};
+
     explicit Node(NodeKind K) : Kind(K) {}
     virtual ~Node() = default;
 
@@ -485,7 +490,7 @@ struct FunctionSignatureNode : public TypeNode {
     // The function's calling convention.
     CallingConv CallConvention = CallingConv::None;
 
-    // Function flags (gloabl, public, etc)
+    // Function flags (global, public, etc)
     FuncClass FunctionClass{FuncClassValue(FC_Global)};
 
     FunctionRefQualifier RefQualifier = FunctionRefQualifier::None;

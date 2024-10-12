@@ -19,11 +19,9 @@
 #include "DemangleConfig.h"
 
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
 #include <limits>
 #include <string_view>
 
@@ -47,7 +45,7 @@ class OutputBuffer {
             BufferCapacity *= 2;
             if (BufferCapacity < Need) BufferCapacity = Need;
             Buffer = static_cast<char*>(std::realloc(Buffer, BufferCapacity));
-            if (Buffer == nullptr) std::terminate();
+            if (Buffer == nullptr) std::abort();
         }
     }
 
@@ -140,7 +138,7 @@ public:
     OutputBuffer& operator<<(unsigned int N) { return this->operator<<(static_cast<unsigned long long>(N)); }
 
     void insert(size_t Pos, const char* S, size_t N) {
-        assert(Pos <= CurrentPosition);
+        DEMANGLE_ASSERT(Pos <= CurrentPosition, "");
         if (N == 0) return;
         grow(N);
         std::memmove(Buffer + Pos + N, Buffer + Pos, CurrentPosition - Pos);
@@ -152,7 +150,7 @@ public:
     void   setCurrentPosition(size_t NewPos) { CurrentPosition = NewPos; }
 
     char back() const {
-        assert(CurrentPosition);
+        DEMANGLE_ASSERT(CurrentPosition, "");
         return Buffer[CurrentPosition - 1];
     }
 

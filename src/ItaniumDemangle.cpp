@@ -40,15 +40,13 @@ const char* itanium_demangle::parse_discriminator(const char* first, const char*
             if (t1 != last) {
                 if (std::isdigit(*t1)) first = t1 + 1;
                 else if (*t1 == '_') {
-                    for (++t1; t1 != last && std::isdigit(*t1); ++t1)
-                        ;
+                    for (++t1; t1 != last && std::isdigit(*t1); ++t1);
                     if (t1 != last && *t1 == '_') first = t1 + 1;
                 }
             }
         } else if (std::isdigit(*first)) {
             const char* t1 = first + 1;
-            for (; t1 != last && std::isdigit(*t1); ++t1)
-                ;
+            for (; t1 != last && std::isdigit(*t1); ++t1);
             if (t1 == last) first = last;
         }
     }
@@ -355,11 +353,11 @@ public:
 
 using Demangler = itanium_demangle::ManglingParser<DefaultAllocator>;
 
-char* demangler::itaniumDemangle(std::string_view MangledName) {
+char* demangler::itaniumDemangle(std::string_view MangledName, bool ParseParams) {
     if (MangledName.empty()) return nullptr;
 
     Demangler Parser(MangledName.data(), MangledName.data() + MangledName.length());
-    Node*     AST = Parser.parse();
+    Node*     AST = Parser.parse(ParseParams);
     if (!AST) return nullptr;
 
     OutputBuffer OB;

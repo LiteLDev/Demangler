@@ -85,6 +85,11 @@
 #define DEMANGLE_FALLTHROUGH
 #endif
 
+#ifndef DEMANGLE_ASSERT
+#include <cassert>
+#define DEMANGLE_ASSERT(__expr, __msg) assert((__expr) && (__msg))
+#endif
+
 #define DEMANGLE_NAMESPACE_BEGIN                                                                                       \
     namespace demangler {                                                                                              \
     namespace itanium_demangle {

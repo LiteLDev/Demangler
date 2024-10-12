@@ -141,6 +141,8 @@ void PrimitiveTypeNode::outputPre(OutputBuffer& OB, OutputFlags Flags) const {
         OUTPUT_ENUM_CLASS_VALUE(PrimitiveKind, Double, "double");
         OUTPUT_ENUM_CLASS_VALUE(PrimitiveKind, Ldouble, "long double");
         OUTPUT_ENUM_CLASS_VALUE(PrimitiveKind, Nullptr, "std::nullptr_t");
+        OUTPUT_ENUM_CLASS_VALUE(PrimitiveKind, Auto, "auto");
+        OUTPUT_ENUM_CLASS_VALUE(PrimitiveKind, DecltypeAuto, "decltype(auto)");
     }
     outputQualifiers(OB, Quals, true, false);
 }
@@ -334,18 +336,18 @@ void LiteralOperatorIdentifierNode::output(OutputBuffer& OB, OutputFlags Flags) 
 
 void FunctionSignatureNode::outputPre(OutputBuffer& OB, OutputFlags Flags) const {
     if (!(Flags & OF_NoAccessSpecifier)) {
-        if (FunctionClass.val & FC_Public) OB << "public: ";
-        if (FunctionClass.val & FC_Protected) OB << "protected: ";
-        if (FunctionClass.val & FC_Private) OB << "private: ";
+        if (FunctionClass & FC_Public) OB << "public: ";
+        if (FunctionClass & FC_Protected) OB << "protected: ";
+        if (FunctionClass & FC_Private) OB << "private: ";
     }
 
     if (!(Flags & OF_NoMemberType)) {
-        if (!(FunctionClass.val & FC_Global)) {
-            if (FunctionClass.val & FC_Static) OB << "static ";
+        if (!(FunctionClass & FC_Global)) {
+            if (FunctionClass & FC_Static) OB << "static ";
         }
-        if (FunctionClass.val & FC_Virtual) OB << "virtual ";
+        if (FunctionClass & FC_Virtual) OB << "virtual ";
 
-        if (FunctionClass.val & FC_ExternC) OB << "extern \"C\" ";
+        if (FunctionClass & FC_ExternC) OB << "extern \"C\" ";
     }
 
     if (!(Flags & OF_NoReturnType) && ReturnType) {
@@ -357,7 +359,7 @@ void FunctionSignatureNode::outputPre(OutputBuffer& OB, OutputFlags Flags) const
 }
 
 void FunctionSignatureNode::outputPost(OutputBuffer& OB, OutputFlags Flags) const {
-    if (!(FunctionClass.val & FC_NoParameterList)) {
+    if (!(FunctionClass & FC_NoParameterList)) {
         OB << "(";
         if (Params) Params->output(OB, Flags);
         else OB << "void";
@@ -389,10 +391,10 @@ void ThunkSignatureNode::outputPre(OutputBuffer& OB, OutputFlags Flags) const {
 }
 
 void ThunkSignatureNode::outputPost(OutputBuffer& OB, OutputFlags Flags) const {
-    if (FunctionClass.val & FC_StaticThisAdjust) {
+    if (FunctionClass & FC_StaticThisAdjust) {
         OB << "`adjustor{" << ThisAdjust.StaticOffset << "}'";
-    } else if (FunctionClass.val & FC_VirtualThisAdjust) {
-        if (FunctionClass.val & FC_VirtualThisAdjustEx) {
+    } else if (FunctionClass & FC_VirtualThisAdjust) {
+        if (FunctionClass & FC_VirtualThisAdjustEx) {
             OB << "`vtordispex{" << ThisAdjust.VBPtrOffset << ", " << ThisAdjust.VBOffsetOffset << ", "
                << ThisAdjust.VtordispOffset << ", " << ThisAdjust.StaticOffset << "}'";
         } else {
