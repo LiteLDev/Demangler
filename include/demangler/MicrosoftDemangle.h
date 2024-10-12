@@ -152,7 +152,7 @@ public:
 
     virtual void dumpBackReferences();
 
-protected:
+public:
     virtual SymbolNode* demangleEncodedSymbol(std::string_view& MangledName, QualifiedNameNode* QN);
     virtual SymbolNode* demangleDeclarator(std::string_view& MangledName);
     virtual SymbolNode* demangleMD5Name(std::string_view& MangledName);
