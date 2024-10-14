@@ -129,13 +129,14 @@ enum class CallingConv : uint8_t {
 enum class ReferenceKind : uint8_t { None, LValueRef, RValueRef };
 
 enum OutputFlags {
-    OF_Default             = 0,
-    OF_NoCallingConvention = 1,
-    OF_NoTagSpecifier      = 2,
-    OF_NoAccessSpecifier   = 4,
-    OF_NoMemberType        = 8,
-    OF_NoReturnType        = 16,
-    OF_NoVariableType      = 32,
+    OF_Default              = 0,
+    OF_NoCallingConvention  = 1 << 0,
+    OF_NoTagSpecifier       = 1 << 1,
+    OF_NoAccessSpecifier    = 1 << 2,
+    OF_NoMemberType         = 1 << 3,
+    OF_NoReturnType         = 1 << 4,
+    OF_NoVariableType       = 1 << 5,
+    OF_NoTemplateParameters = 1 << 6,
 };
 
 // Types

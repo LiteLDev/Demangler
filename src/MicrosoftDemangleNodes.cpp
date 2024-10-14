@@ -199,7 +199,7 @@ void TemplateParameterReferenceNode::output(OutputBuffer& OB, OutputFlags Flags)
 }
 
 void IdentifierNode::outputTemplateParameters(OutputBuffer& OB, OutputFlags Flags) const {
-    if (!TemplateParams) return;
+    if (!TemplateParams || (Flags & OF_NoTemplateParameters)) return;
     OB << "<";
     TemplateParams->output(OB, Flags);
     OB << ">";
