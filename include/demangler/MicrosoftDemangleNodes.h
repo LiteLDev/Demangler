@@ -735,9 +735,10 @@ struct SymbolNode : public Node {
 struct SpecialTableSymbolNode : public SymbolNode {
     explicit SpecialTableSymbolNode() : SymbolNode(NodeKind::SpecialTableSymbol) {}
 
-    void               output(OutputBuffer& OB, OutputFlags Flags) const override;
-    QualifiedNameNode* TargetName = nullptr;
-    Qualifiers         Quals      = Qualifiers::Q_None;
+    void                 output(OutputBuffer& OB, OutputFlags Flags) const override;
+    QualifiedNameNode*   TargetName    = nullptr;
+    Qualifiers           Quals         = Qualifiers::Q_None;
+    SpecialIntrinsicKind IntrinsicKind = SpecialIntrinsicKind::None;
 };
 
 struct LocalStaticGuardVariableNode : public SymbolNode {

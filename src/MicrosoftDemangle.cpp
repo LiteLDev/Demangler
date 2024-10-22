@@ -268,6 +268,7 @@ Demangler::demangleSpecialTableSymbolNode(std::string_view& MangledName, Special
     }
     QualifiedNameNode*      QN   = demangleNameScopeChain(MangledName, NI);
     SpecialTableSymbolNode* STSN = Arena.alloc<SpecialTableSymbolNode>();
+    STSN->IntrinsicKind          = K;
     STSN->Name                   = QN;
     bool IsMember                = false;
     if (MangledName.empty()) {
