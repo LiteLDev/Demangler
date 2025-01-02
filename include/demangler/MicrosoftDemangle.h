@@ -114,6 +114,7 @@ private:
 struct BackrefContext {
     static constexpr size_t Max = 10;
 
+    bool      global = true;
     TypeNode* FunctionParams[Max];
     size_t    FunctionParamCount = 0;
 

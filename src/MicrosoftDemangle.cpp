@@ -922,7 +922,7 @@ IdentifierNode* Demangler::demangleTemplateInstantiationName(std::string_view& M
     assert(demangler::itanium_demangle::starts_with(MangledName, "?$"));
     consumeFront(MangledName, "?$");
 
-    BackrefContext OuterContext;
+    BackrefContext OuterContext{.global = false};
     std::swap(OuterContext, Backrefs);
 
     IdentifierNode* Identifier = demangleUnqualifiedSymbolName(MangledName, NBB_Simple);
