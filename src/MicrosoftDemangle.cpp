@@ -1368,7 +1368,10 @@ QualifiedNameNode* Demangler::demangleFullyQualifiedSymbolName(std::string_view&
     // can appear in this context is a function template, and since those are
     // not saved for the purposes of name backreferences, only backref simple
     // names.
-    IdentifierNode* Identifier = demangleUnqualifiedSymbolName(MangledName, NBB_Simple);
+    // If this symbol is nested inside a template-instantiation backref context,
+    // its own function name is not part of that context's simple-name table.
+    IdentifierNode* Identifier =
+        demangleUnqualifiedSymbolName(MangledName, Backrefs.global ? NBB_Simple : NBB_None);
     if (Error) return nullptr;
 
     QualifiedNameNode* QN = demangleNameScopeChain(MangledName, Identifier);

@@ -114,6 +114,9 @@ private:
 struct BackrefContext {
     static constexpr size_t Max = 10;
 
+    // False while parsing a template instantiation's private backref context.
+    // Symbols nested there (for example a local lambda's parent function) must
+    // not memorize their function name into the template parameter name table.
     bool      global = true;
     TypeNode* FunctionParams[Max];
     size_t    FunctionParamCount = 0;
